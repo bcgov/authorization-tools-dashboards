@@ -479,18 +479,48 @@ def create_weekly_trend(df):
     df_copy = df.copy()
     df_copy['week'] = pd.to_datetime(df_copy['date']).dt.to_period('W').apply(lambda r: r.start_time)
     weekly = df_copy.groupby(['week', 'user_group']).size().reset_index(name='runs')
-    
+
+    current_week = pd.Timestamp.now().to_period('W').start_time
+
     fig = go.Figure()
     for group, color in [(GROUP_GIS, COLORS['chart'][3]), (GROUP_NON_GIS, COLORS['chart'][5])]:
-        grp = weekly[weekly['user_group'] == group]
+        grp = weekly[weekly['user_group'] == group].sort_values('week')
+        completed = grp[grp['week'] < current_week]
+        partial = grp[grp['week'] == current_week]
+
+        # Solid line for completed weeks
         fig.add_trace(go.Scatter(
-            x=grp['week'], y=grp['runs'], mode='lines+markers',
+            x=completed['week'], y=completed['runs'], mode='lines+markers',
             name=group, line=dict(color=color), marker=dict(color=color)
         ))
+
+        # Dashed segment from last completed to partial week
+        if not partial.empty and not completed.empty:
+            bridge_x = [completed['week'].iloc[-1], partial['week'].iloc[0]]
+            bridge_y = [completed['runs'].iloc[-1], partial['runs'].iloc[0]]
+            fig.add_trace(go.Scatter(
+                x=bridge_x, y=bridge_y, mode='lines+markers',
+                showlegend=False,
+                line=dict(color=color, dash='dash'),
+                marker=dict(color=color, symbol='circle-open', size=8)
+            ))
+        elif not partial.empty:
+            fig.add_trace(go.Scatter(
+                x=partial['week'], y=partial['runs'], mode='markers',
+                showlegend=False,
+                marker=dict(color=color, symbol='circle-open', size=8)
+            ))
+
     fig.update_layout(**get_chart_layout('Weekly Run Trend'))
     fig.update_layout(
         yaxis_title='Total Runs',
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5)
+    )
+    fig.add_annotation(
+        text="Dashed = current week (partial)",
+        xref="paper", yref="paper", x=1.0, y=-0.25,
+        showarrow=False, font=dict(size=10, color=COLORS['text_muted']),
+        xanchor='right'
     )
     return fig
 
@@ -645,6 +675,13 @@ def create_failure_rate_trend(df):
         errors=('has_error', 'sum'),
     ).reset_index()
     region_weekly['failure_rate'] = region_weekly['errors'] / region_weekly['total'] * 100
+
+    # Smooth regional lines with 3-week centred moving average
+    region_weekly = region_weekly.sort_values(['ast_region', 'week'])
+    region_weekly['failure_rate'] = (
+        region_weekly.groupby('ast_region')['failure_rate']
+        .transform(lambda s: s.rolling(3, center=True, min_periods=1).mean())
+    )
 
     # Build stable color map: sort regions by total errors descending (matches pie)
     region_order = (
@@ -934,26 +971,30 @@ def create_reprojection_stats(df):
     Shows the % of runs reprojected, and distribution of source CRSs.
     """
     df = df[df['user_group'] == GROUP_NON_GIS]
+    df = df[df['layer_input_provided'] == True]
     total_runs = len(df)
-    
+
     if total_runs == 0:
         fig = go.Figure()
-        fig.add_annotation(text="No data", xref="paper", yref="paper", 
+        fig.add_annotation(text="No data", xref="paper", yref="paper",
                            x=0.5, y=0.5, showarrow=False)
         fig.update_layout(**get_chart_layout('Reprojection Analytics (Non-GIS)', height=320))
         return fig
-        
+
     reprojected = df[df['was_reprojected']]
     n_reprojected = len(reprojected)
     pct_reprojected = (n_reprojected / total_runs * 100)
-    
+    subtitle = f"{n_reprojected} / {total_runs} runs with input layer were reprojected"
+
     if n_reprojected == 0:
          fig = go.Figure()
-         # Show "0% Reprojected" in center
-         fig.add_annotation(text="0%<br>Reprojected", xref="paper", yref="paper", 
+         fig.add_annotation(text="0%<br>Reprojected", xref="paper", yref="paper",
                             x=0.5, y=0.5, showarrow=False, font=dict(size=20, color=COLORS['text']))
          fig.update_layout(**get_chart_layout('Reprojection Analytics (Non-GIS)', height=320))
-         # Hide axes to make it clean
+         fig.add_annotation(text=subtitle, xref="paper", yref="paper",
+                            x=0.5, y=-0.15, showarrow=False,
+                            font=dict(size=11, color=COLORS['text_muted']))
+         fig.update_layout(margin=dict(b=50))
          fig.update_xaxes(showgrid=False, zeroline=False, visible=False)
          fig.update_yaxes(showgrid=False, zeroline=False, visible=False)
          return fig
@@ -961,16 +1002,20 @@ def create_reprojection_stats(df):
     # Count source CRSs
     counts = reprojected['source_projection'].value_counts().reset_index()
     counts.columns = ['projection', 'count']
-    
-    fig = px.pie(counts, values='count', names='projection', 
+
+    fig = px.pie(counts, values='count', names='projection',
                  title=None, hole=0.6)
-                 
+
     fig.update_layout(**get_chart_layout('Reprojection Analytics (Non-GIS)', height=320))
-    fig.add_annotation(text=f"{pct_reprojected:.1f}%<br>Reprojected", 
+    fig.add_annotation(text=f"{pct_reprojected:.1f}%<br>Reprojected",
                        xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False,
                        font=dict(size=14, color=COLORS['text']))
+    fig.add_annotation(text=subtitle, xref="paper", yref="paper",
+                       x=0.5, y=-0.15, showarrow=False,
+                       font=dict(size=11, color=COLORS['text_muted']))
+    fig.update_layout(margin=dict(b=50))
     fig.update_traces(textposition='inside', textinfo='percent+label')
-                       
+
     return fig
 
 
