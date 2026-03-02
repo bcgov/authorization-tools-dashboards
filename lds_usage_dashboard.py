@@ -29,7 +29,7 @@ OUTPUT_FILE = os.path.join(OUTPUT_DIR, "index.html")
 
 # S3-compatible object storage configuration
 S3_BUCKET = "gssgeodrive"
-S3_PREFIX = "authorizations/new folder|143/lds_tool_logs/"
+S3_PREFIX = "authorizations/logs/lds_tool_logs/"
 
 s3_client = boto3.client(
     "s3",
