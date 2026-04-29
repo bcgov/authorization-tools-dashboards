@@ -1,6 +1,6 @@
 # Authorization Tools Dashboards
 
-Usage statistics dashboards for BC GeoBC authorization tools. Dashboards are automatically generated nightly from tool usage logs stored in S3-compatible object storage and published as a static site via GitHub Pages.
+Usage statistics dashboards BC GeoBC authorization tools. Dashboards are automatically updated nightly from tool usage logs stored in NRS object storage and published as a static site via GitHub Pages.
 
 ## Live Dashboards
 
@@ -8,18 +8,15 @@ Usage statistics dashboards for BC GeoBC authorization tools. Dashboards are aut
 
 | Dashboard | URL |
 |---|---|
-| LDS — Legal Description Schedule | [/lds/](https://bcgov.github.io/authorization-tools-dashboards/lds/) |
-| Water Plat | [/waterplat/](https://bcgov.github.io/authorization-tools-dashboards/waterplat/) *(under development)* |
+| Legal Description Schedule (LDS) Tool| [/lds/](https://bcgov.github.io/authorization-tools-dashboards/lds/) |
+| Water Plat Tool | [/waterplat/](https://bcgov.github.io/authorization-tools-dashboards/waterplat/) |
 
 ## What They Track
 
-### LDS Dashboard
-- **Usage Volume** — daily run trends, runs by region, GIS vs Non-GIS user breakdown
-- **Performance & Reliability** — median LDS/AST processing times, success and failure rates, weekly failure rate trends, common error messages
-- **Feature Adoption** — usage rates for optional features like inset maps, provincial reference maps, AST, and legal descriptions
+- **Usage Volume** — weekly run trends, runs by region, GIS vs Non-GIS user breakdown
+- **Performance & Reliability** — execution times, success and failure rates, weekly failure rate trends, common error messages
+- **Feature Adoption** — usage rates for optional features
 
-### Water Plat Dashboard
-Under development. Will track usage statistics for the Water Plat tool from its JSONL log files.
 
 ## How It Works
 
@@ -28,7 +25,7 @@ S3 Object Storage          GitHub Actions (nightly)         GitHub Pages
 ┌──────────────┐          ┌─────────────────────┐          ┌──────────────────┐
 │  JSONL logs  │──read──▶ │  Python scripts     │──push──▶│  Static HTML     │
 │  per tool    │          │  generate per-tool  │          │  served at       │
-│  (S3 bucket) │          │  HTML with Plotly   │          │  /<tool>/ paths  │
+│  (OS bucket) │          │  HTML with Plotly   │          │  /<tool>/ paths  │
 └──────────────┘          └─────────────────────┘          └──────────────────┘
 ```
 
@@ -49,7 +46,7 @@ The dashboards read JSONL log files from the NRS ObjectStore:
 ├── landing/
 │   └── index.html                    # Landing page (copied to output/index.html during build)
 ├── lds_usage_dashboard.py            # LDS dashboard generator
-├── waterplat_usage_dashboard.py      # Water Plat dashboard generator (placeholder)
+├── waterplat_usage_dashboard.py      # Water Plat dashboard generator
 ├── requirements.txt                  # Python dependencies
 └── README.md
 ```
