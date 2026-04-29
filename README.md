@@ -36,7 +36,7 @@ The dashboards read JSONL log files from the NRS ObjectStore:
 | Tool | S3 prefix | File patterns |
 |---|---|---|
 | LDS | `authorizations/logs/lds_tool_logs/` | `*_summary.jsonl`, `*_detail.jsonl` |
-| Water Plat | `authorizations/logs/water_tool_logs/` | TBD |
+| Water Plat | `authorizations/logs/water_tool_logs/` | `*_summary.jsonl` |
 
 ## Repository Structure
 
