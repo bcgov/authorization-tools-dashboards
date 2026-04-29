@@ -63,4 +63,7 @@ jobs:
           publish_branch: gh-pages
           # Keep only the latest deployment (no history of old dashboards)
           force_orphan: true
+          # Attribute commits to the bot so they don't show on user profile contributions
+          user_name: 'github-actions[bot]'
+          user_email: '41898282+github-actions[bot]@users.noreply.github.com'
           commit_message: "Update dashboard — ${{ github.run_id }}"

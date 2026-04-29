@@ -46,7 +46,7 @@ EXCLUDED_USERS = {'MLABIADH'}
 
 # GIS specialists — everyone else is categorized as "Non-GIS"
 GIS_USERS = {'MSEASTWO', 'ALLSHEPH', 'SEPARSON', 'AERASMUS', 'JBUSSE',
-             'JFOY', 'CSOSTAD', 'JSANDERS'}
+             'JFOY', 'CSOSTAD', 'JSANDERS', 'SRAHIMI'}
 
 GROUP_GIS = 'GIS Users'
 GROUP_NON_GIS = 'Non-GIS Users'
