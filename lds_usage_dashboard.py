@@ -128,6 +128,13 @@ def load_data():
     df_summary['date'] = df_summary['timestamp_start'].dt.date
     df_summary['hour'] = df_summary['timestamp_start'].dt.hour
 
+    # Normalize region values — the source data has inconsistent casing
+    # (e.g. "West_Coast" and "west_coast" referring to the same region).
+    if 'ast_region' in df_summary.columns:
+        df_summary['ast_region'] = (
+            df_summary['ast_region'].astype('string').str.strip().str.lower()
+        )
+
     # --- Load detail files ---
     detail_keys = _list_s3_keys("_detail.jsonl")
     print(f"\nFound {len(detail_keys)} detail file(s)")
@@ -999,8 +1006,19 @@ def create_reprojection_stats(df):
          fig.update_yaxes(showgrid=False, zeroline=False, visible=False)
          return fig
 
-    # Count source CRSs
-    counts = reprojected['source_projection'].value_counts().reset_index()
+    # Shorten projection labels to just the EPSG code (e.g. "EPSG:4326")
+    # to keep the legend compact. Falls back to a truncated original string
+    # for projections that don't include an EPSG code.
+    def _shorten_proj(label):
+        if not isinstance(label, str):
+            return label
+        m = re.search(r'EPSG:\s*(\d+)', label)
+        if m:
+            return f"EPSG:{m.group(1)}"
+        return label if len(label) <= 30 else label[:27] + '...'
+
+    short = reprojected['source_projection'].apply(_shorten_proj)
+    counts = short.value_counts().reset_index()
     counts.columns = ['projection', 'count']
 
     fig = px.pie(counts, values='count', names='projection',
@@ -1309,6 +1327,15 @@ def generate_html(df, metrics):
             letter-spacing: 1px;
         }}
 
+        footer a {{
+            color: {COLORS['chart'][1]};
+            text-decoration: none;
+        }}
+
+        footer a:hover {{
+            text-decoration: underline;
+        }}
+
         @media (max-width: 1200px) {{
             .charts-grid-3 {{
                 grid-template-columns: 1fr 1fr;
@@ -1451,7 +1478,7 @@ def generate_html(df, metrics):
     </section>
 
     <footer>
-        <p>Tool Usage Analytics &bull; Data from monthly JSONL logs (summary + detail)</p>
+        <p>Tool Usage Analytics &bull; Data from monthly JSONL logs (summary + detail) &bull; <a href="../index.html">Back to dashboards</a></p>
     </footer>
 
     <script>
