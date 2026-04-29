@@ -23,7 +23,7 @@ import plotly.graph_objects as go
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output", "lds")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "index.html")
 

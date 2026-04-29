@@ -1,4 +1,4 @@
-name: Update LDS Dashboard
+name: Update Authorization Tools Dashboards
 
 on:
   schedule:
@@ -43,15 +43,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # 5. Run the dashboard generator
-      #    Secrets are injected as environment variables — the script
-      #    reads them via os.getenv()
-      - name: Generate dashboard
+      # 5. Run the dashboard generators
+      #    Secrets are injected as environment variables — the scripts
+      #    read them via os.getenv(). Each script writes its own subpath
+      #    under output/. The landing page is copied to output/index.html.
+      - name: Generate dashboards
         env:
           S3_NRS_ENDPOINT: ${{ secrets.S3_NRS_ENDPOINT }}
           S3_GSS_GEODRIVE_KEY_ID: ${{ secrets.S3_GSS_GEODRIVE_KEY_ID }}
           S3_GSS_GEODRIVE_SECRET_KEY: ${{ secrets.S3_GSS_GEODRIVE_SECRET_KEY }}
-        run: python lds_usage_dashboard.py
+        run: |
+          python lds_usage_dashboard.py
+          python waterplat_usage_dashboard.py
+          cp landing/index.html output/index.html
 
       # 6. Deploy the generated HTML to the gh-pages branch
       #    This creates/updates the branch automatically.

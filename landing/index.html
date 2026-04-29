@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Authorization Tools Dashboards</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --accent: #e94560;
+            --success: #4ade80;
+            --info: #38bdf8;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg-primary);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 4rem 1.5rem;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            max-width: 720px;
+        }
+        h1 {
+            margin: 0 0 0.75rem;
+            font-size: 2.25rem;
+            color: var(--text);
+        }
+        header p {
+            color: var(--text-muted);
+            font-size: 1.05rem;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 760px;
+        }
+        .card {
+            display: block;
+            background: var(--bg-secondary);
+            color: var(--text);
+            text-decoration: none;
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
+        }
+        .card h2 {
+            margin: 0 0 0.5rem;
+            font-size: 1.35rem;
+        }
+        .card.lds h2 { color: var(--accent); }
+        .card.waterplat h2 { color: var(--info); }
+        .card p {
+            margin: 0;
+            color: var(--text-muted);
+            line-height: 1.5;
+            font-size: 0.95rem;
+        }
+        .card .arrow {
+            display: inline-block;
+            margin-top: 1rem;
+            color: var(--success);
+            font-weight: 500;
+        }
+        footer {
+            margin-top: 4rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Authorization Tools Dashboards</h1>
+        <p>Usage statistics for BC GeoBC authorization tools, generated nightly from production logs.</p>
+    </header>
+
+    <div class="grid">
+        <a class="card lds" href="./lds/index.html">
+            <h2>LDS Dashboard</h2>
+            <p>Legal Description Schedule tool — usage volume, performance, reliability, and feature adoption.</p>
+            <span class="arrow">View dashboard →</span>
+        </a>
+
+        <a class="card waterplat" href="./waterplat/index.html">
+            <h2>Water Plat Dashboard</h2>
+            <p>Water Plat tool usage statistics. Currently under development.</p>
+            <span class="arrow">View dashboard →</span>
+        </a>
+    </div>
+
+    <footer>
+        Built nightly from S3 logs · <a href="https://github.com/bcgov/authorization-tools-dashboards" style="color: var(--text-muted);">Source</a>
+    </footer>
+</body>
+</html>
