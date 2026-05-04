@@ -47,7 +47,7 @@ EXCLUDED_USERS = {'MLABIADH'}
 
 # GIS specialists — same list as LDS dashboard. Anyone else is "Non-GIS".
 GIS_USERS = {'MSEASTWO', 'ALLSHEPH', 'SEPARSON', 'AERASMUS', 'JBUSSE',
-             'JFOY', 'CSOSTAD', 'JSANDERS', 'SRAHIMI'}
+             'JFOY', 'CSOSTAD', 'JSANDERS', 'SRAHIMI', 'SACOOPER'}
 
 GROUP_GIS = 'GIS Users'
 GROUP_NON_GIS = 'Non-GIS Users'
