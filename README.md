@@ -1,6 +1,6 @@
 # Authorization Tools Dashboards
 
-Usage statistics dashboards BC GeoBC authorization tools. Dashboards are automatically updated nightly from tool usage logs stored in NRS object storage and published as a static site via GitHub Pages.
+Usage statistics dashboards for GeoBC authorization tools. Dashboards are automatically updated nightly from tool usage logs stored in NRS object storage and published as a static site via GitHub Pages.
 
 ## Live Dashboards
 
@@ -36,7 +36,7 @@ The dashboards read JSONL log files from the NRS ObjectStore:
 | Tool | S3 prefix | File patterns |
 |---|---|---|
 | LDS | `authorizations/logs/lds_tool_logs/` | `*_summary.jsonl`, `*_detail.jsonl` |
-| Water Plat | `authorizations/logs/water_tool_logs/` | `*_summary.jsonl` |
+| Water Plat | `authorizations/logs/water_tool_logs/` | `*_summary.jsonl`, `*_detail.jsonl` |
 
 ## Repository Structure
 

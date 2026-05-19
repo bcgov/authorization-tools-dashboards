@@ -16,6 +16,8 @@ Author:
 import os
 import io
 import re
+import json
+import shutil
 import boto3
 import pandas as pd
 import plotly.express as px
@@ -915,33 +917,89 @@ def create_optional_flags(df):
 # =============================================================================
 # HTML GENERATION
 # =============================================================================
+# Columns embedded in the page as window.RUNS_DATA so the JS dashboard can
+# filter by date and re-aggregate every chart/metric client-side.
+RUNS_PAYLOAD_COLUMNS = [
+    'run_id', 'timestamp_start', 'duration_seconds',
+    'status', 'clean_user', 'user_group', 'machine',
+    'region', 'water_district', 'water_precinct',
+    'land_district', 'watershed', 'mapsheet',
+    'error_message', 'detail_error_message', 'detail_error_stage',
+    'warning_count',
+    'map_type',
+    'pod_count', 'pid_count', 'well_tag_count',
+    'mineral_count', 'range_count', 'su_count',
+    'uot', 'temp_pd_provided', 'temp_st_provided', 'scale_override',
+    'file_num', 'lic_num',
+]
+
+
+def _runs_to_json_payload(df):
+    """Serialize the enriched runs dataframe to a JSON string for embedding.
+
+    Only the columns the JS dashboard reads are included to keep the payload
+    small. Timestamps become ISO strings; pandas NaN/NaT become JSON null.
+    """
+    cols = [c for c in RUNS_PAYLOAD_COLUMNS if c in df.columns]
+    payload = df[cols].copy()
+
+    if 'timestamp_start' in payload.columns:
+        payload['timestamp_start'] = pd.to_datetime(
+            payload['timestamp_start']
+        ).dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    payload = payload.astype(object).where(pd.notna(payload), None)
+
+    records = payload.to_dict(orient='records')
+    return _safe_inline_json(records)
+
+
+def _safe_inline_json(obj):
+    """JSON-encode `obj` for safe embedding inside an inline <script> tag.
+
+    Replaces `</` with `<\\/` so a stray `</script>` inside string data
+    can't terminate the surrounding script element.
+    """
+    s = json.dumps(obj, default=str, separators=(',', ':'))
+    return s.replace('</', '<\\/')
+
+
+def _config_to_json_payload():
+    """Build the CONFIG object the JS dashboard reads for colors and labels."""
+    cfg = {
+        'colors': COLORS,
+        'group_gis': GROUP_GIS,
+        'group_non_gis': GROUP_NON_GIS,
+        'generic_error_stages': sorted(_GENERIC_ERROR_STAGES),
+        'stage_colors': STAGE_COLORS,
+    }
+    return _safe_inline_json(cfg)
+
+
+def _emit_dashboard_js():
+    """Copy waterplat_dashboard.js next to the generated index.html."""
+    src = os.path.join(os.path.dirname(__file__), 'waterplat_dashboard.js')
+    dest = os.path.join(OUTPUT_DIR, 'dashboard.js')
+    shutil.copyfile(src, dest)
+    print(f"✓ Copied dashboard.js → {dest}")
+
+
 def generate_html(df, metrics):
-    """Generate complete HTML dashboard."""
+    """Generate the dashboard HTML shell.
+
+    Charts and metric values are NOT pre-rendered server-side. Instead, the
+    enriched runs dataframe is embedded as JSON; dashboard.js renders every
+    chart and metric card on page load and re-renders them when the date
+    filter changes.
+    """
     from datetime import datetime
     from zoneinfo import ZoneInfo
     generated_at = datetime.now(ZoneInfo('America/Los_Angeles')).strftime('%Y-%m-%d %H:%M %Z')
 
-    charts = {
-        'weekly_trend': create_weekly_trend(df).to_html(full_html=False, include_plotlyjs=False),
-        'user_dist_gis': create_user_distribution_gis(df).to_html(full_html=False, include_plotlyjs=False),
-        'user_dist_non_gis': create_user_distribution_non_gis(df).to_html(full_html=False, include_plotlyjs=False),
-        'region_dist': create_region_distribution(df).to_html(full_html=False, include_plotlyjs=False),
-        'user_group_split': create_user_group_split(df).to_html(full_html=False, include_plotlyjs=False),
-        'usage_heatmap': create_usage_heatmap(df).to_html(full_html=False, include_plotlyjs=False),
-        'status_dist': create_status_distribution(df).to_html(full_html=False, include_plotlyjs=False),
-        'failure_rate_trend': create_failure_rate_trend(df).to_html(full_html=False, include_plotlyjs=False),
-        'error_msgs': create_error_messages(df).to_html(full_html=False, include_plotlyjs=False),
-        'error_region': create_error_by_region(df).to_html(full_html=False, include_plotlyjs=False),
-        'error_stages': create_error_stages(df).to_html(full_html=False, include_plotlyjs=False),
-        'map_type_dist': create_map_type_distribution(df).to_html(full_html=False, include_plotlyjs=False),
-        'layer_adoption': create_layer_adoption(df).to_html(full_html=False, include_plotlyjs=False),
-        'optional_flags': create_optional_flags(df).to_html(full_html=False, include_plotlyjs=False),
-    }
-
-    def format_duration(seconds):
-        if seconds >= 60:
-            return f"{seconds / 60:.1f}m"
-        return f"{seconds:.0f}s"
+    runs_payload = _runs_to_json_payload(df)
+    config_payload = _config_to_json_payload()
+    full_date_from = metrics['date_from']
+    full_date_to = metrics['date_to']
 
     html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -1000,6 +1058,93 @@ def generate_html(df, metrics):
             color: {COLORS['text_muted']};
             font-family: monospace;
         }}
+        .filter-bar {{
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 16px;
+            background: linear-gradient(135deg, {COLORS['bg_secondary']} 0%, {COLORS['bg_primary']} 100%);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 4px;
+            padding: 14px 18px;
+            margin-bottom: 32px;
+        }}
+        .filter-section {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }}
+        .filter-label {{
+            font-family: monospace;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: {COLORS['text_muted']};
+        }}
+        .filter-arrow {{
+            color: {COLORS['text_muted']};
+            font-size: 14px;
+        }}
+        input[type="date"] {{
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: {COLORS['text']};
+            padding: 6px 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 13px;
+            color-scheme: dark;
+        }}
+        input[type="date"]:focus {{
+            outline: none;
+            border-color: {COLORS['chart'][3]};
+        }}
+        .filter-btn, .preset-btn {{
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: {COLORS['text']};
+            padding: 6px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.15s ease;
+        }}
+        .filter-btn:hover, .preset-btn:hover {{
+            background: rgba(56, 189, 248, 0.15);
+            border-color: {COLORS['chart'][3]};
+        }}
+        .filter-btn.primary, .preset-btn.active {{
+            background: {COLORS['chart'][3]};
+            border-color: {COLORS['chart'][3]};
+            color: #0f1729;
+        }}
+        .filter-btn.primary:hover {{ background: rgba(56, 189, 248, 0.85); }}
+        .filter-presets {{
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }}
+        .filter-meta {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+            font-family: monospace;
+            font-size: 12px;
+            color: {COLORS['text_muted']};
+        }}
+        #filter-count {{
+            color: {COLORS['text']};
+            font-weight: 600;
+        }}
+        .filter-error {{
+            color: {COLORS['error']};
+            font-size: 11px;
+        }}
         section {{ margin-bottom: 48px; }}
         .section-header {{
             font-size: 20px;
@@ -1055,7 +1200,9 @@ def generate_html(df, metrics):
             border-radius: 4px;
             padding: 16px;
             overflow: hidden;
+            min-height: 320px;
         }}
+        .chart-container > div {{ width: 100%; }}
         .chart-container .js-plotly-plot {{ width: 100% !important; }}
         .chart-container .plotly {{ width: 100% !important; }}
         footer {{
@@ -1081,6 +1228,7 @@ def generate_html(df, metrics):
             .header-right .meta-line {{ justify-content: flex-start; }}
             .header-left h1 {{ font-size: 28px; }}
             .charts-grid, .charts-grid-3 {{ grid-template-columns: 1fr; }}
+            .filter-meta {{ margin-left: 0; }}
         }}
     </style>
 </head>
@@ -1095,10 +1243,34 @@ def generate_html(df, metrics):
                 <span class="status-indicator"></span>
             </div>
             <div class="meta-line">
-                <span class="subtitle">Data Period: {metrics['date_from']} to {metrics['date_to']}</span>
+                <span class="subtitle">Data Period: {full_date_from} to {full_date_to}</span>
             </div>
         </div>
     </header>
+
+    <div class="filter-bar" role="region" aria-label="Date range filter">
+        <div class="filter-section">
+            <span class="filter-label">Period:</span>
+            <input type="date" id="filter-start" aria-label="Start date">
+            <span class="filter-arrow">&rarr;</span>
+            <input type="date" id="filter-end" aria-label="End date">
+            <button id="filter-apply" class="filter-btn primary">Apply</button>
+            <button id="filter-reset" class="filter-btn">Reset</button>
+        </div>
+        <div class="filter-presets">
+            <button class="preset-btn" data-preset="7d">7d</button>
+            <button class="preset-btn" data-preset="30d">30d</button>
+            <button class="preset-btn" data-preset="90d">90d</button>
+            <button class="preset-btn" data-preset="6mo">6mo</button>
+            <button class="preset-btn" data-preset="ytd">YTD</button>
+            <button class="preset-btn active" data-preset="all">All</button>
+        </div>
+        <div class="filter-meta">
+            <span>Showing</span>
+            <span id="filter-count">&mdash;</span>
+            <span id="filter-error" class="filter-error" role="alert"></span>
+        </div>
+    </div>
 
     <!-- USAGE VOLUME -->
     <section>
@@ -1106,34 +1278,34 @@ def generate_html(df, metrics):
         <div class="metrics-grid">
             <div class="metric-card">
                 <div class="label">Total Runs</div>
-                <div class="value">{metrics['total_runs']}</div>
+                <div class="value"><span data-metric="total_runs">&mdash;</span></div>
                 <div class="card-subtitle">All records</div>
             </div>
             <div class="metric-card">
                 <div class="label">Unique Users</div>
-                <div class="value">{metrics['unique_users']}</div>
-                <div class="card-subtitle">{metrics['gis_users']} GIS &bull; {metrics['non_gis_users']} Non-GIS</div>
+                <div class="value"><span data-metric="unique_users">&mdash;</span></div>
+                <div class="card-subtitle"><span data-metric="gis_users">&mdash;</span> GIS &bull; <span data-metric="non_gis_users">&mdash;</span> Non-GIS</div>
             </div>
             <div class="metric-card">
                 <div class="label">GIS Runs</div>
-                <div class="value">{metrics['gis_runs']}</div>
+                <div class="value"><span data-metric="gis_runs">&mdash;</span></div>
                 <div class="card-subtitle">GIS specialist runs</div>
             </div>
             <div class="metric-card">
                 <div class="label">Non-GIS Runs</div>
-                <div class="value">{metrics['non_gis_runs']}</div>
+                <div class="value"><span data-metric="non_gis_runs">&mdash;</span></div>
                 <div class="card-subtitle">Non-GIS user runs</div>
             </div>
         </div>
         <div class="charts-grid charts-grid-3">
-            <div class="chart-container">{charts['weekly_trend']}</div>
-            <div class="chart-container">{charts['region_dist']}</div>
-            <div class="chart-container">{charts['user_group_split']}</div>
+            <div class="chart-container"><div id="chart-weekly_trend"></div></div>
+            <div class="chart-container"><div id="chart-region_dist"></div></div>
+            <div class="chart-container"><div id="chart-user_group_split"></div></div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 0.7fr; gap: 16px; margin-top: 16px;">
-            <div class="chart-container">{charts['user_dist_gis']}</div>
-            <div class="chart-container">{charts['user_dist_non_gis']}</div>
-            <div class="chart-container">{charts['usage_heatmap']}</div>
+            <div class="chart-container"><div id="chart-user_dist_gis"></div></div>
+            <div class="chart-container"><div id="chart-user_dist_non_gis"></div></div>
+            <div class="chart-container"><div id="chart-usage_heatmap"></div></div>
         </div>
     </section>
 
@@ -1143,45 +1315,45 @@ def generate_html(df, metrics):
         <div class="metrics-grid">
             <div class="metric-card">
                 <div class="label">Median Run Time</div>
-                <div class="value">{format_duration(metrics['median_duration'])}</div>
+                <div class="value"><span data-metric="median_duration" data-format="duration">&mdash;</span></div>
                 <div class="card-subtitle">All runs</div>
             </div>
             <div class="metric-card">
                 <div class="label">P90 Run Time</div>
-                <div class="value">{format_duration(metrics['p90_duration'])}</div>
+                <div class="value"><span data-metric="p90_duration" data-format="duration">&mdash;</span></div>
                 <div class="card-subtitle">90th percentile</div>
             </div>
             <div class="metric-card">
                 <div class="label">Success Rate</div>
-                <div class="value">{metrics['non_gis_success_rate']:.1f}%</div>
+                <div class="value"><span data-metric="non_gis_success_rate" data-format="percent">&mdash;</span></div>
                 <div class="card-subtitle">Non-GIS runs</div>
             </div>
             <div class="metric-card">
                 <div class="label">Failure Rate</div>
-                <div class="value">{metrics['non_gis_error_rate']:.1f}%</div>
+                <div class="value"><span data-metric="non_gis_error_rate" data-format="percent">&mdash;</span></div>
                 <div class="card-subtitle">Non-GIS runs</div>
             </div>
             <div class="metric-card">
                 <div class="label">Warning Rate</div>
-                <div class="value">{metrics['warning_rate']:.1f}%</div>
+                <div class="value"><span data-metric="warning_rate" data-format="percent">&mdash;</span></div>
                 <div class="card-subtitle">Runs with warnings</div>
             </div>
             <div class="metric-card">
                 <div class="label">Error Types</div>
-                <div class="value">{metrics['error_types']}</div>
+                <div class="value"><span data-metric="error_types">&mdash;</span></div>
                 <div class="card-subtitle">Unique errors</div>
             </div>
         </div>
         <div class="charts-grid" style="margin-top: 16px;">
-            <div class="chart-container" style="grid-column: span 2;">{charts['failure_rate_trend']}</div>
+            <div class="chart-container" style="grid-column: span 2;"><div id="chart-failure_rate_trend"></div></div>
         </div>
         <div class="charts-grid charts-grid-3" style="margin-top: 16px;">
-            <div class="chart-container">{charts['status_dist']}</div>
-            <div class="chart-container">{charts['error_region']}</div>
-            <div class="chart-container">{charts['error_stages']}</div>
+            <div class="chart-container"><div id="chart-status_dist"></div></div>
+            <div class="chart-container"><div id="chart-error_region"></div></div>
+            <div class="chart-container"><div id="chart-error_stages"></div></div>
         </div>
         <div class="charts-grid" style="margin-top: 16px;">
-            <div class="chart-container" style="grid-column: span 2;">{charts['error_msgs']}</div>
+            <div class="chart-container" style="grid-column: span 2;"><div id="chart-error_msgs"></div></div>
         </div>
     </section>
 
@@ -1189,9 +1361,9 @@ def generate_html(df, metrics):
     <section>
         <h2 class="section-header">Feature Adoption</h2>
         <div class="charts-grid charts-grid-3">
-            <div class="chart-container">{charts['map_type_dist']}</div>
-            <div class="chart-container">{charts['layer_adoption']}</div>
-            <div class="chart-container">{charts['optional_flags']}</div>
+            <div class="chart-container"><div id="chart-map_type_dist"></div></div>
+            <div class="chart-container"><div id="chart-layer_adoption"></div></div>
+            <div class="chart-container"><div id="chart-optional_flags"></div></div>
         </div>
     </section>
 
@@ -1200,19 +1372,10 @@ def generate_html(df, metrics):
     </footer>
 
     <script>
-        window.addEventListener('resize', function() {{
-            document.querySelectorAll('.js-plotly-plot').forEach(function(plot) {{
-                Plotly.Plots.resize(plot);
-            }});
-        }});
-        window.addEventListener('load', function() {{
-            setTimeout(function() {{
-                document.querySelectorAll('.js-plotly-plot').forEach(function(plot) {{
-                    Plotly.Plots.resize(plot);
-                }});
-            }}, 100);
-        }});
+      window.RUNS_DATA = {runs_payload};
+      window.DASHBOARD_CONFIG = {config_payload};
     </script>
+    <script src="dashboard.js"></script>
 </body>
 </html>'''
 
@@ -1260,4 +1423,7 @@ if __name__ == '__main__':
         f.write(html_content)
 
     print(f"\n✓ Generated {OUTPUT_FILE}")
+
+    # Copy the JS dashboard module next to the HTML so the page can load it
+    _emit_dashboard_js()
     print("=" * 60 + "\n")
