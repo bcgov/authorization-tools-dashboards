@@ -1143,6 +1143,19 @@ RUNS_PAYLOAD_COLUMNS = [
     'layer_input_provided', 'inset_map', 'prov_ref_map',
     'replace_hyper', 'input_legal_desc_provided',
     'was_reprojected', 'source_projection',
+    'out_dir',
+]
+
+# Boolean columns the JS dashboard compares with strict === (true/false).
+# If a truncated log record is missing one of these fields, pandas upcasts the
+# whole column from bool to float64 (True->1.0, False->0.0, NaN), and the
+# embedded payload would ship numbers the strict checks never match. These are
+# coerced back to real booleans before serialization.
+BOOL_PAYLOAD_COLUMNS = [
+    'ast', 'ast_completed',
+    'layer_input_provided', 'inset_map', 'prov_ref_map',
+    'replace_hyper', 'input_legal_desc_provided',
+    'was_reprojected',
 ]
 
 
@@ -1159,6 +1172,15 @@ def _runs_to_json_payload(df):
         payload['timestamp_start'] = pd.to_datetime(
             payload['timestamp_start']
         ).dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    # Coerce boolean flags back to real booleans (NaN -> None). Guards against
+    # pandas upcasting bool columns to float64 when a truncated record is
+    # missing the field — see BOOL_PAYLOAD_COLUMNS.
+    for col in BOOL_PAYLOAD_COLUMNS:
+        if col in payload.columns:
+            payload[col] = payload[col].map(
+                lambda v: None if pd.isna(v) else bool(v)
+            )
 
     # Replace NaN/NaT with None across object/numeric columns alike
     payload = payload.astype(object).where(pd.notna(payload), None)
@@ -1659,9 +1681,10 @@ def generate_html(df, metrics):
     <!-- FEATURE ADOPTION -->
     <section>
         <h2 class="section-header">Feature Adoption</h2>
-        <div class="charts-grid">
+        <div class="charts-grid charts-grid-3">
             <div class="chart-container"><div id="chart-feature_adoption"></div></div>
             <div class="chart-container"><div id="chart-prov_ref_region"></div></div>
+            <div class="chart-container"><div id="chart-land_folder_region"></div></div>
         </div>
     </section>
 

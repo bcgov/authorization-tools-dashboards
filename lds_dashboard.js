@@ -839,17 +839,17 @@
         });
 
         var traces = [{
-            type: 'bar', orientation: 'h',
-            x: rates.map(function (r) { return r.rate; }),
-            y: rates.map(function (r) { return r.feature; }),
+            type: 'bar',
+            x: rates.map(function (r) { return r.feature; }),
+            y: rates.map(function (r) { return r.rate; }),
             marker: { color: CHART_PALETTE[4] },
             text: rates.map(function (r) { return r.rate.toFixed(1) + '%'; }),
             textposition: 'outside',
         }];
         var layout = chartLayout('Feature Usage Rates', 350);
-        layout.xaxis.title = { text: 'Adoption %' };
-        layout.xaxis.range = [0, 100];
-        layout.margin = { l: 100, r: 60, t: 50, b: 60 };
+        layout.yaxis.title = { text: 'Adoption %' };
+        layout.yaxis.range = [0, 100];
+        layout.margin = { l: 60, r: 20, t: 50, b: 80 };
         plot(id, traces, layout);
     }
 
@@ -885,6 +885,57 @@
         plot(id, traces, layout);
     }
 
+    // Standardized output location for finalized status packages. The share
+    // \\spatialfiles.bcgov\work is mapped to W: on most workstations, so out_dir
+    // shows up in either the mapped-drive or UNC form — normalize and match both.
+    var LAND_FOLDER_ROOTS = [
+        'w:\\srm\\fcbc\\land',
+        '\\\\spatialfiles.bcgov\\work\\srm\\fcbc\\land',
+    ];
+
+    function isLandFolder(outDir) {
+        if (typeof outDir !== 'string') return false;
+        var p = outDir.toLowerCase().replace(/\//g, '\\');
+        for (var i = 0; i < LAND_FOLDER_ROOTS.length; i++) {
+            if (p.indexOf(LAND_FOLDER_ROOTS[i]) === 0) return true;
+        }
+        return false;
+    }
+
+    function renderLandFolderByRegion(id, runs) {
+        var title = 'FCBC Folder Output by Region (Non-GIS)';
+        var nonGis = runs.filter(function (r) { return r.user_group === GROUP_NON_GIS; });
+        if (!nonGis.length) { renderEmpty(id, title, 'No data', 350); return; }
+
+        var byRegion = new Map();
+        nonGis.forEach(function (r) {
+            if (r.ast_region == null) return;
+            var b = byRegion.get(r.ast_region);
+            if (!b) { b = { total: 0, land: 0 }; byRegion.set(r.ast_region, b); }
+            b.total++;
+            if (isLandFolder(r.out_dir)) b.land++;
+        });
+
+        if (!byRegion.size) { renderEmpty(id, title, 'No data', 350); return; }
+
+        var rows = Array.from(byRegion.entries()).map(function (e) {
+            return { region: e[0], pct: e[1].total > 0 ? (e[1].land / e[1].total * 100) : 0 };
+        });
+
+        var traces = [{
+            type: 'bar',
+            x: rows.map(function (r) { return r.region; }),
+            y: rows.map(function (r) { return r.pct; }),
+            marker: { color: CHART_PALETTE[3] },
+            text: rows.map(function (r) { return Math.round(r.pct) + '%'; }),
+            textposition: 'outside',
+        }];
+        var layout = chartLayout(title, 350);
+        layout.yaxis.title = { text: 'Land folder %' };
+        layout.yaxis.range = [0, 100];
+        plot(id, traces, layout);
+    }
+
     // -------------------------------------------------------------------------
     // Apply filter — recompute everything for the given window
     // -------------------------------------------------------------------------
@@ -911,6 +962,7 @@
         renderReprojectionStats('chart-reprojection_stats', filtered);
         renderFeatureAdoption('chart-feature_adoption', filtered);
         renderProvRefByRegion('chart-prov_ref_region', filtered);
+        renderLandFolderByRegion('chart-land_folder_region', filtered);
     }
 
     // -------------------------------------------------------------------------
