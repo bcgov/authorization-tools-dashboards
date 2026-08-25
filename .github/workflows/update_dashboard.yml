@@ -18,6 +18,9 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # Generous enough for the retry waits below, tight enough that a hung run
+    # doesn't sit on the runner for hours.
+    timeout-minutes: 30
 
     steps:
       # 1. Check out the repo (main branch)
@@ -47,15 +50,35 @@ jobs:
       #    Secrets are injected as environment variables — the scripts
       #    read them via os.getenv(). Each script writes its own subpath
       #    under output/. The landing page is copied to output/index.html.
+      #
+      #    The NRS object store occasionally times out for a few minutes at a
+      #    time. boto3 already retries with backoff inside each script; this
+      #    loop covers outages that outlast those retries. Both generators are
+      #    idempotent, so a retry simply regenerates everything from scratch.
       - name: Generate dashboards
         env:
           S3_NRS_ENDPOINT: ${{ secrets.S3_NRS_ENDPOINT }}
           S3_GSS_GEODRIVE_KEY_ID: ${{ secrets.S3_GSS_GEODRIVE_KEY_ID }}
           S3_GSS_GEODRIVE_SECRET_KEY: ${{ secrets.S3_GSS_GEODRIVE_SECRET_KEY }}
+          MAX_ATTEMPTS: '3'
+          RETRY_DELAY_SECONDS: '300'
         run: |
-          python lds_usage_dashboard.py
-          python waterplat_usage_dashboard.py
-          cp landing/index.html output/index.html
+          set -uo pipefail
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "::group::Dashboard generation — attempt $attempt of $MAX_ATTEMPTS"
+            if python lds_usage_dashboard.py && python waterplat_usage_dashboard.py; then
+              echo "::endgroup::"
+              cp landing/index.html output/index.html
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "::warning::Attempt $attempt failed. Retrying in ${RETRY_DELAY_SECONDS}s."
+              sleep "$RETRY_DELAY_SECONDS"
+            fi
+          done
+          echo "::error::Dashboard generation failed after $MAX_ATTEMPTS attempts."
+          exit 1
 
       # 6. Deploy the generated HTML to the gh-pages branch
       #    This creates/updates the branch automatically.

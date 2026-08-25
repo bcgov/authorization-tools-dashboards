@@ -18,6 +18,7 @@ import re
 import json
 import shutil
 import boto3
+from botocore.config import Config
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -33,11 +34,21 @@ OUTPUT_FILE = os.path.join(OUTPUT_DIR, "index.html")
 S3_BUCKET = "gssgeodrive"
 S3_PREFIX = "authorizations/logs/lds_tool_logs/"
 
+# The object store drops connections for a few minutes every once in a while.
+# Fail fast on the TCP handshake (botocore defaults to 60s) and let it retry with
+# exponential backoff instead of burning a full minute per attempt.
+S3_CONFIG = Config(
+    connect_timeout=15,
+    read_timeout=60,
+    retries={"max_attempts": 8, "mode": "standard"},
+)
+
 s3_client = boto3.client(
     "s3",
     endpoint_url=os.getenv("S3_NRS_ENDPOINT"),
     aws_access_key_id=os.getenv("S3_GSS_GEODRIVE_KEY_ID"),
     aws_secret_access_key=os.getenv("S3_GSS_GEODRIVE_SECRET_KEY"),
+    config=S3_CONFIG,
 )
 
 # =============================================================================
